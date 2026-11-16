@@ -2,7 +2,6 @@ package setup
 
 import (
 	"context"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,13 +39,6 @@ type Backend struct {
 
 func Setup(ctx context.Context, cfg TelemetryOptions) (ShutdowwnFunc, error) {
 
-	logFile, err := os.OpenFile("execution.log", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
-	slog.SetDefault(slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{
-		AddSource:   true,
-		Level:       slog.LevelDebug,
-		ReplaceAttr: nil,
-	})))
-
 	internalOpts := toInternalConfig(cfg)
 	tracerShutdown, err := telemetry.SetupTracer(ctx, internalOpts)
 	if err != nil {
@@ -58,13 +50,17 @@ func Setup(ctx context.Context, cfg TelemetryOptions) (ShutdowwnFunc, error) {
 		return telemetry.EmptyFunc, err
 	}
 
+	loggerShutdown, err := telemetry.SetupLogger(ctx, internalOpts)
+	if err != nil {
+		return telemetry.EmptyFunc, err
+	}
+
 	return func() {
 		var wg sync.WaitGroup
+
 		wg.Go(tracerShutdown)
 		wg.Go(meterShutdowwn)
-		wg.Go(func() {
-			_ = logFile.Close()
-		})
+		wg.Go(loggerShutdown)
 
 		wg.Wait()
 	}, nil

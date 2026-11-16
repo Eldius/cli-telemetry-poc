@@ -10,6 +10,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -65,4 +67,17 @@ func PersistentPostRunE(cmd *cobra.Command, args []string) error {
 
 	}
 	return nil
+}
+
+var defaultResources *resource.Resource
+
+func getDefaultResources(cfg Options) *resource.Resource {
+	if defaultResources == nil {
+		defaultResources = resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(cfg.Service.Name),
+			semconv.ServiceVersionKey.String(cfg.Service.Version),
+		)
+	}
+	return defaultResources
 }

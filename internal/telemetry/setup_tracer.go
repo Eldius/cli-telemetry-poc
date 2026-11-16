@@ -10,9 +10,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"google.golang.org/grpc/encoding/gzip"
 )
 
@@ -72,11 +70,7 @@ func newSpanExporter(_ context.Context, cfg Options) (sdktrace.SpanExporter, err
 }
 
 func newTracerProvider(_ context.Context, exp sdktrace.SpanExporter, cfg Options) *sdktrace.TracerProvider {
-	res := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(cfg.Service.Name),
-		semconv.ServiceVersionKey.String(cfg.Service.Version),
-	)
+	res := getDefaultResources(cfg)
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.AlwaysSample()),

@@ -7,7 +7,7 @@ import (
 )
 
 // NewHTTPClient returns a new instrumented
-// HTTP client
+// HTTP curseforge
 func NewHTTPClient() *http.Client {
 	return client.NewHTTPClient()
 }

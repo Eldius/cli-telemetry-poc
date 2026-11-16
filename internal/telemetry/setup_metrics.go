@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"time"
 
@@ -12,8 +11,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"google.golang.org/grpc/encoding/gzip"
 )
 
@@ -33,7 +30,7 @@ func SetupMeter(ctx context.Context, cfg Options) (func(), error) {
 	otel.SetMeterProvider(provider)
 	// Start go runtime metric collection.
 	if err := runtime.Start(runtime.WithMinimumReadMemStatsInterval(3 * time.Second)); err != nil {
-		log.Fatal(err)
+		return EmptyFunc, err
 	}
 	return func() {
 		slog.Debug("Meter exporter shutting down")
@@ -72,11 +69,7 @@ func newMeterExporter(_ context.Context, cfg Options) (*otlpmetricgrpc.Exporter,
 }
 
 func newMeterProvider(_ context.Context, exp metric.Exporter, cfg Options) *metric.MeterProvider {
-	res := resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(cfg.Service.Name),
-		semconv.ServiceVersionKey.String(cfg.Service.Version),
-	)
+	res := getDefaultResources(cfg)
 
 	tp := metric.NewMeterProvider(
 		metric.WithResource(res),
