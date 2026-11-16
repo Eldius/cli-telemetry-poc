@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge/store"
+	curseforge2 "github.com/eldius/cli-telemetry-poc/client/curseforge"
+	store2 "github.com/eldius/cli-telemetry-poc/client/curseforge/store"
 )
 
 // fakeAPI implements a small in-memory CurseForge API for tests.
@@ -117,12 +117,12 @@ func (f *fakeAPI) serveSearch(w http.ResponseWriter, r *http.Request) {
 		data, pageSize, len(mods), total)
 }
 
-func setupSyncTest(t *testing.T, api *fakeAPI) (*Scraper, *store.SQLiteStore) {
+func setupSyncTest(t *testing.T, api *fakeAPI) (*Scraper, *store2.SQLiteStore) {
 	t.Helper()
 	srv := httptest.NewServer(api.handler())
 	t.Cleanup(srv.Close)
 
-	c, err := curseforge.New(curseforge.Config{
+	c, err := curseforge2.New(curseforge2.Config{
 		BaseURL:           srv.URL,
 		APIKey:            "test-key",
 		RequestsPerSecond: 1000,
@@ -132,13 +132,13 @@ func setupSyncTest(t *testing.T, api *fakeAPI) (*Scraper, *store.SQLiteStore) {
 	}
 	t.Cleanup(c.Close)
 
-	db, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	db, err := store2.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open() error: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	badger, err := store.NewBadgerStore(t.Context(), filepath.Join(t.TempDir(), "badger"))
+	badger, err := store2.NewBadgerStore(t.Context(), filepath.Join(t.TempDir(), "badger"))
 	if err != nil {
 		t.Fatalf("store.NewBadgerStore() error: %v", err)
 	}
@@ -151,8 +151,8 @@ func TestFullSyncPartitionsAroundResultCap(t *testing.T) {
 	old := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	api := &fakeAPI{
 		modsByVersion: map[string][]string{
-			"1.20.1": {modJSON(101, curseforge.ClassMods, old), modJSON(102, curseforge.ClassMods, old)},
-			"1.19.2": {modJSON(103, curseforge.ClassMods, old)},
+			"1.20.1": {modJSON(101, curseforge2.ClassMods, old), modJSON(102, curseforge2.ClassMods, old)},
+			"1.19.2": {modJSON(103, curseforge2.ClassMods, old)},
 		},
 		// Class-level query exceeds the API result cap and must be subdivided
 		// by game version.
@@ -162,7 +162,7 @@ func TestFullSyncPartitionsAroundResultCap(t *testing.T) {
 
 	err := s.Sync(context.Background(), SyncOptions{
 		Full:    true,
-		Classes: []curseforge.ClassInfo{{ID: curseforge.ClassMods, Name: "Mods", Slug: "mods"}},
+		Classes: []curseforge2.ClassInfo{{ID: curseforge2.ClassMods, Name: "Mods", Slug: "mods"}},
 	})
 	if err != nil {
 		t.Fatalf("Sync() error: %v", err)
@@ -197,9 +197,9 @@ func TestFullSyncAllVersionsIncludesSnapshots(t *testing.T) {
 	old := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	api := &fakeAPI{
 		modsByVersion: map[string][]string{
-			"1.20.1": {modJSON(101, curseforge.ClassMods, old)},
-			"1.19.2": {modJSON(102, curseforge.ClassMods, old)},
-			"23w13a": {modJSON(103, curseforge.ClassMods, old)},
+			"1.20.1": {modJSON(101, curseforge2.ClassMods, old)},
+			"1.19.2": {modJSON(102, curseforge2.ClassMods, old)},
+			"23w13a": {modJSON(103, curseforge2.ClassMods, old)},
 		},
 		totalOverrides: map[string]int{"6|": maxSearchResults + 1},
 	}
@@ -208,7 +208,7 @@ func TestFullSyncAllVersionsIncludesSnapshots(t *testing.T) {
 	err := s.Sync(context.Background(), SyncOptions{
 		Full:        true,
 		AllVersions: true,
-		Classes:     []curseforge.ClassInfo{{ID: curseforge.ClassMods, Name: "Mods", Slug: "mods"}},
+		Classes:     []curseforge2.ClassInfo{{ID: curseforge2.ClassMods, Name: "Mods", Slug: "mods"}},
 	})
 	if err != nil {
 		t.Fatalf("Sync() error: %v", err)
@@ -229,14 +229,14 @@ func TestSmallCatalogSyncsWithoutPartitioning(t *testing.T) {
 	// below the cap, so no version partition should happen.
 	api := &fakeAPI{
 		modsByVersion: map[string][]string{
-			"": {modJSON(101, curseforge.ClassWorlds, old), modJSON(102, curseforge.ClassWorlds, old)},
+			"": {modJSON(101, curseforge2.ClassWorlds, old), modJSON(102, curseforge2.ClassWorlds, old)},
 		},
 	}
 	s, db := setupSyncTest(t, api)
 
 	err := s.Sync(context.Background(), SyncOptions{
 		Full:    true,
-		Classes: []curseforge.ClassInfo{{ID: curseforge.ClassWorlds, Name: "Worlds", Slug: "worlds"}},
+		Classes: []curseforge2.ClassInfo{{ID: curseforge2.ClassWorlds, Name: "Worlds", Slug: "worlds"}},
 	})
 	if err != nil {
 		t.Fatalf("Sync() error: %v", err)
@@ -258,14 +258,14 @@ func TestIncrementalSyncOnlyFetchesUpdates(t *testing.T) {
 	old := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	api := &fakeAPI{
 		modsByVersion: map[string][]string{
-			"": {modJSON(101, curseforge.ClassMods, old)},
+			"": {modJSON(101, curseforge2.ClassMods, old)},
 		},
 	}
 	s, db := setupSyncTest(t, api)
 	ctx := context.Background()
-	class := curseforge.ClassInfo{ID: curseforge.ClassMods, Name: "Mods", Slug: "mods"}
+	class := curseforge2.ClassInfo{ID: curseforge2.ClassMods, Name: "Mods", Slug: "mods"}
 
-	if err := s.Sync(ctx, SyncOptions{Full: true, Classes: []curseforge.ClassInfo{class}}); err != nil {
+	if err := s.Sync(ctx, SyncOptions{Full: true, Classes: []curseforge2.ClassInfo{class}}); err != nil {
 		t.Fatalf("full Sync() error: %v", err)
 	}
 
@@ -273,13 +273,13 @@ func TestIncrementalSyncOnlyFetchesUpdates(t *testing.T) {
 	updated := time.Now().Add(2 * time.Hour).UTC()
 	api.mu.Lock()
 	api.recentMods = []string{
-		modJSON(102, curseforge.ClassMods, updated),
-		modJSON(101, curseforge.ClassMods, old),
+		modJSON(102, curseforge2.ClassMods, updated),
+		modJSON(101, curseforge2.ClassMods, old),
 	}
 	api.mu.Unlock()
 
 	// Second sync without --full must be incremental.
-	if err := s.Sync(ctx, SyncOptions{Full: false, Classes: []curseforge.ClassInfo{class}}); err != nil {
+	if err := s.Sync(ctx, SyncOptions{Full: false, Classes: []curseforge2.ClassInfo{class}}); err != nil {
 		t.Fatalf("incremental Sync() error: %v", err)
 	}
 
@@ -293,61 +293,61 @@ func TestIncrementalSyncOnlyFetchesUpdates(t *testing.T) {
 }
 
 func TestSubdivide(t *testing.T) {
-	versions := []curseforge.GameVersion{{Name: "1.20.1"}, {Name: "1.19.2"}}
-	categories := []curseforge.Category{{ID: 417}, {ID: 418}}
-	mods := curseforge.ClassInfo{ID: curseforge.ClassMods, Name: "Mods", Slug: "mods"}
-	packs := curseforge.ClassInfo{ID: curseforge.ClassResourcePacks, Name: "Resource Packs", Slug: "resource-packs"}
+	versions := []curseforge2.GameVersion{{Name: "1.20.1"}, {Name: "1.19.2"}}
+	categories := []curseforge2.Category{{ID: 417}, {ID: 418}}
+	mods := curseforge2.ClassInfo{ID: curseforge2.ClassMods, Name: "Mods", Slug: "mods"}
+	packs := curseforge2.ClassInfo{ID: curseforge2.ClassResourcePacks, Name: "Resource Packs", Slug: "resource-packs"}
 
 	tests := []struct {
 		name      string
 		p         partition
-		class     curseforge.ClassInfo
+		class     curseforge2.ClassInfo
 		want      []partition
 		wantEmpty bool
 	}{
 		{
 			name:  "class level splits by version",
-			p:     partition{classID: curseforge.ClassMods},
+			p:     partition{classID: curseforge2.ClassMods},
 			class: mods,
 			want: []partition{
-				{classID: curseforge.ClassMods, version: "1.20.1"},
-				{classID: curseforge.ClassMods, version: "1.19.2"},
+				{classID: curseforge2.ClassMods, version: "1.20.1"},
+				{classID: curseforge2.ClassMods, version: "1.19.2"},
 			},
 		},
 		{
 			name:  "version splits by loader for loader classes",
-			p:     partition{classID: curseforge.ClassMods, version: "1.20.1"},
+			p:     partition{classID: curseforge2.ClassMods, version: "1.20.1"},
 			class: mods,
 			want: []partition{
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 1},
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 2},
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 3},
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 4},
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 5},
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 6},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 1},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 2},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 3},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 4},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 5},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 6},
 			},
 		},
 		{
 			name:  "version splits by category for non-loader classes",
-			p:     partition{classID: curseforge.ClassResourcePacks, version: "1.20.1"},
+			p:     partition{classID: curseforge2.ClassResourcePacks, version: "1.20.1"},
 			class: packs,
 			want: []partition{
-				{classID: curseforge.ClassResourcePacks, version: "1.20.1", categoryID: 417},
-				{classID: curseforge.ClassResourcePacks, version: "1.20.1", categoryID: 418},
+				{classID: curseforge2.ClassResourcePacks, version: "1.20.1", categoryID: 417},
+				{classID: curseforge2.ClassResourcePacks, version: "1.20.1", categoryID: 418},
 			},
 		},
 		{
 			name:  "version and loader split by category",
-			p:     partition{classID: curseforge.ClassMods, version: "1.20.1", loader: 1},
+			p:     partition{classID: curseforge2.ClassMods, version: "1.20.1", loader: 1},
 			class: mods,
 			want: []partition{
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 1, categoryID: 417},
-				{classID: curseforge.ClassMods, version: "1.20.1", loader: 1, categoryID: 418},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 1, categoryID: 417},
+				{classID: curseforge2.ClassMods, version: "1.20.1", loader: 1, categoryID: 418},
 			},
 		},
 		{
 			name:      "fully qualified partition cannot be subdivided",
-			p:         partition{classID: curseforge.ClassMods, version: "1.20.1", loader: 1, categoryID: 417},
+			p:         partition{classID: curseforge2.ClassMods, version: "1.20.1", loader: 1, categoryID: 417},
 			class:     mods,
 			wantEmpty: true,
 		},

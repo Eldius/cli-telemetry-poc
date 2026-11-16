@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client"
-	"github.com/eldius/cli-telemetry-poc/internal/client/firecrawl"
+	"github.com/eldius/cli-telemetry-poc/client/firecrawl"
+	"github.com/eldius/cli-telemetry-poc/internal/http"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +15,7 @@ var searchCmd = &cobra.Command{
 	Short: "Search the internet",
 	Long:  `Search the internet.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.NewHTTPClient()
+		c := http.NewHTTPClient()
 
 		res, err := firecrawl.Search(cmd.Context(), c, strings.Join(args, " "))
 		if err != nil {

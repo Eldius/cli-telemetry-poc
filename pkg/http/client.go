@@ -3,11 +3,11 @@ package http
 import (
 	"net/http"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client"
+	inthttp "github.com/eldius/cli-telemetry-poc/internal/http"
 )
 
 // NewHTTPClient returns a new instrumented
 // HTTP curseforge
 func NewHTTPClient() *http.Client {
-	return client.NewHTTPClient()
+	return inthttp.NewHTTPClient()
 }

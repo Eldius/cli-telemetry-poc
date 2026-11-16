@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge"
 )
 
 func testBadger(t *testing.T) *BadgerStore {

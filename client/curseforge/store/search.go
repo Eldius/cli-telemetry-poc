@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge"
 )
 
 // SearchMods searches the stored mods, most downloaded first. Results are

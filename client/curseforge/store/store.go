@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge"
 )
 
 // Store represents a storage interface for managing mods and categories

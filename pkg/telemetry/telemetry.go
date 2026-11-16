@@ -2,7 +2,10 @@ package telemetry
 
 import (
 	"context"
+	"log/slog"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -18,4 +21,15 @@ func RecordErrorAndClose(ctx context.Context, err error, options ...trace.SpanEn
 	span.RecordError(err)
 	span.End(options...)
 	return err
+}
+
+// NewInt64CounterMeter returns a new Int64 counter meter
+func NewInt64CounterMeter() metric.Int64Counter {
+	meterProvider := otel.GetMeterProvider().Meter("cli-telemetry-poc")
+	counter, err := meterProvider.Int64Counter("minecraft_fetched_mods_count")
+	if err != nil {
+		slog.With("error", err).Warn("Failed to create meter")
+	}
+
+	return counter
 }

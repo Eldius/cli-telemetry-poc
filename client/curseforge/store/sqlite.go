@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge"
 	"github.com/eldius/cli-telemetry-poc/pkg/db"
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite" // SQLite driver

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge"
 	badgerhold "github.com/timshannon/badgerhold/v4"
 )
 

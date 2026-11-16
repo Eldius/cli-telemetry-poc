@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge/scraper"
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge/store"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge/scraper"
+	"github.com/eldius/cli-telemetry-poc/client/curseforge/store"
 	"github.com/eldius/cli-telemetry-poc/pkg/http"
 	"github.com/eldius/cli-telemetry-poc/pkg/telemetry"
 	"github.com/spf13/cobra"

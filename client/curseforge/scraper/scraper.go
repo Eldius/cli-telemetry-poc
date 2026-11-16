@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge"
-	"github.com/eldius/cli-telemetry-poc/internal/client/curseforge/store"
+	curseforge2 "github.com/eldius/cli-telemetry-poc/client/curseforge"
+	store2 "github.com/eldius/cli-telemetry-poc/client/curseforge/store"
 )
 
 // maxSearchResults is the CurseForge search API cap: results beyond this
@@ -30,23 +30,23 @@ type SyncOptions struct {
 	// (by default only release versions are used).
 	AllVersions bool
 	// Classes are the content classes to sync.
-	Classes []curseforge.ClassInfo
+	Classes []curseforge2.ClassInfo
 }
 
 // Scraper fetches CurseForge content and stores it locally.
 type Scraper struct {
-	api      *curseforge.Client
-	db       *store.SQLiteStore
-	badger   *store.BadgerStore
+	api      *curseforge2.Client
+	db       *store2.SQLiteStore
+	badger   *store2.BadgerStore
 	pageSize int
 	log      *slog.Logger
 
-	versions     []curseforge.GameVersion
+	versions     []curseforge2.GameVersion
 	versionsLoad bool
 }
 
 // New creates a Scraper.
-func New(api *curseforge.Client, db *store.SQLiteStore, badger *store.BadgerStore, pageSize int, log *slog.Logger) *Scraper {
+func New(api *curseforge2.Client, db *store2.SQLiteStore, badger *store2.BadgerStore, pageSize int, log *slog.Logger) *Scraper {
 	if pageSize <= 0 {
 		pageSize = 50
 	}
@@ -67,7 +67,7 @@ func (s *Scraper) Sync(ctx context.Context, opts SyncOptions) error {
 	return nil
 }
 
-func (s *Scraper) syncClass(ctx context.Context, class curseforge.ClassInfo, opts SyncOptions) error {
+func (s *Scraper) syncClass(ctx context.Context, class curseforge2.ClassInfo, opts SyncOptions) error {
 	log := s.log
 	start := time.Now()
 	log.With("class_id", class.ID, "clqaqss_name", class.Name).InfoContext(ctx, "syncing class")
@@ -111,7 +111,7 @@ func (s *Scraper) syncClass(ctx context.Context, class curseforge.ClassInfo, opt
 
 // syncClassFull fetches the whole catalog for a class, recursively
 // partitioning queries that exceed the API result cap.
-func (s *Scraper) syncClassFull(ctx context.Context, class curseforge.ClassInfo, allVersions bool, categories []curseforge.Category) (int, error) {
+func (s *Scraper) syncClassFull(ctx context.Context, class curseforge2.ClassInfo, allVersions bool, categories []curseforge2.Category) (int, error) {
 	versions, err := s.partitionVersions(ctx, allVersions)
 	if err != nil {
 		return 0, err
@@ -158,14 +158,14 @@ func (s *Scraper) syncClassFull(ctx context.Context, class curseforge.ClassInfo,
 
 // syncClassIncremental fetches mods updated since the watermark, sorted by
 // last update descending.
-func (s *Scraper) syncClassIncremental(ctx context.Context, class curseforge.ClassInfo, watermark time.Time) (int, error) {
+func (s *Scraper) syncClassIncremental(ctx context.Context, class curseforge2.ClassInfo, watermark time.Time) (int, error) {
 	total := 0
 	index := 0
 	for ; index < maxSearchResults; index += s.pageSize {
-		res, err := s.api.SearchMods(ctx, curseforge.SearchParams{
+		res, err := s.api.SearchMods(ctx, curseforge2.SearchParams{
 			ClassID:   class.ID,
-			SortField: curseforge.SortFieldLastUpdated,
-			SortOrder: curseforge.SortOrderDesc,
+			SortField: curseforge2.SortFieldLastUpdated,
+			SortOrder: curseforge2.SortOrderDesc,
 			Index:     index,
 			PageSize:  s.pageSize,
 		})
@@ -234,7 +234,7 @@ func (s *Scraper) fetchPartition(ctx context.Context, p partition, limit int) (i
 
 // partitionVersions returns the game versions used to partition full syncs,
 // lazily fetched and cached on the scraper.
-func (s *Scraper) partitionVersions(ctx context.Context, allVersions bool) ([]curseforge.GameVersion, error) {
+func (s *Scraper) partitionVersions(ctx context.Context, allVersions bool) ([]curseforge2.GameVersion, error) {
 	if !s.versionsLoad {
 		versions, err := s.api.GetGameVersions(ctx)
 		if err != nil {
@@ -246,7 +246,7 @@ func (s *Scraper) partitionVersions(ctx context.Context, allVersions bool) ([]cu
 	if allVersions {
 		return s.versions, nil
 	}
-	var releases []curseforge.GameVersion
+	var releases []curseforge2.GameVersion
 	for _, v := range s.versions {
 		if releaseVersion.MatchString(v.Name) {
 			releases = append(releases, v)
@@ -255,7 +255,7 @@ func (s *Scraper) partitionVersions(ctx context.Context, allVersions bool) ([]cu
 	return releases, nil
 }
 
-func (s *Scraper) watermark(ctx context.Context, class curseforge.ClassInfo) (time.Time, bool, error) {
+func (s *Scraper) watermark(ctx context.Context, class curseforge2.ClassInfo) (time.Time, bool, error) {
 	value, ok, err := s.db.GetSyncState(ctx, watermarkKey(class))
 	if err != nil {
 		return time.Time{}, false, err
@@ -270,14 +270,14 @@ func (s *Scraper) watermark(ctx context.Context, class curseforge.ClassInfo) (ti
 	return t, true, nil
 }
 
-func (s *Scraper) setWatermark(ctx context.Context, class curseforge.ClassInfo, t time.Time) error {
+func (s *Scraper) setWatermark(ctx context.Context, class curseforge2.ClassInfo, t time.Time) error {
 	if err := s.db.SetSyncState(ctx, watermarkKey(class), t.UTC().Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("storing watermark for class %s: %w", class.Name, err)
 	}
 	return nil
 }
 
-func watermarkKey(class curseforge.ClassInfo) string {
+func watermarkKey(class curseforge2.ClassInfo) string {
 	return fmt.Sprintf("sync.class.%d.last_update", class.ID)
 }
 
@@ -289,21 +289,21 @@ type partition struct {
 	categoryID int
 }
 
-func (p partition) searchParams(index, pageSize int) curseforge.SearchParams {
-	return curseforge.SearchParams{
+func (p partition) searchParams(index, pageSize int) curseforge2.SearchParams {
+	return curseforge2.SearchParams{
 		ClassID:       p.classID,
 		CategoryID:    p.categoryID,
 		GameVersion:   p.version,
 		ModLoaderType: p.loader,
-		SortField:     curseforge.SortFieldPopularity,
-		SortOrder:     curseforge.SortOrderDesc,
+		SortField:     curseforge2.SortFieldPopularity,
+		SortOrder:     curseforge2.SortOrderDesc,
 		Index:         index,
 		PageSize:      pageSize,
 	}
 }
 
 func (p partition) String() string {
-	s := fmt.Sprintf("class %s", curseforge.ClassName(p.classID))
+	s := fmt.Sprintf("class %s", curseforge2.ClassName(p.classID))
 	if p.version != "" {
 		s += ", version " + p.version
 	}
@@ -320,7 +320,7 @@ func (p partition) String() string {
 // partitions: first by game version, then by mod loader (for loader-based
 // classes), then by category. It returns nil when no further subdivision is
 // possible.
-func subdivide(p partition, class curseforge.ClassInfo, versions []curseforge.GameVersion, categories []curseforge.Category) []partition {
+func subdivide(p partition, class curseforge2.ClassInfo, versions []curseforge2.GameVersion, categories []curseforge2.Category) []partition {
 	if p.version == "" {
 		subs := make([]partition, 0, len(versions))
 		for _, v := range versions {
@@ -328,9 +328,9 @@ func subdivide(p partition, class curseforge.ClassInfo, versions []curseforge.Ga
 		}
 		return subs
 	}
-	if p.loader == 0 && curseforge.ClassUsesLoaders(class.ID) {
-		subs := make([]partition, 0, len(curseforge.LoaderIDs))
-		for _, l := range curseforge.LoaderIDs {
+	if p.loader == 0 && curseforge2.ClassUsesLoaders(class.ID) {
+		subs := make([]partition, 0, len(curseforge2.LoaderIDs))
+		for _, l := range curseforge2.LoaderIDs {
 			subs = append(subs, partition{classID: p.classID, version: p.version, loader: l})
 		}
 		return subs
