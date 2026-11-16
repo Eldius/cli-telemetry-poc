@@ -24,9 +24,9 @@ func RecordErrorAndClose(ctx context.Context, err error, options ...trace.SpanEn
 }
 
 // NewInt64CounterMeter returns a new Int64 counter meter
-func NewInt64CounterMeter() metric.Int64Counter {
+func NewInt64CounterMeter(metricName string) metric.Int64Counter {
 	meterProvider := otel.GetMeterProvider().Meter("cli-telemetry-poc")
-	counter, err := meterProvider.Int64Counter("minecraft_fetched_mods_count")
+	counter, err := meterProvider.Int64Counter(metricName)
 	if err != nil {
 		slog.With("error", err).Warn("Failed to create meter")
 	}

@@ -11,6 +11,8 @@ import (
 
 	curseforge2 "github.com/eldius/cli-telemetry-poc/client/curseforge"
 	store2 "github.com/eldius/cli-telemetry-poc/client/curseforge/store"
+	"github.com/eldius/cli-telemetry-poc/pkg/telemetry"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // maxSearchResults is the CurseForge search API cap: results beyond this
@@ -43,6 +45,11 @@ type Scraper struct {
 
 	versions     []curseforge2.GameVersion
 	versionsLoad bool
+	counters     scrapperCounterSet
+}
+
+type scrapperCounterSet struct {
+	apiRequestsCounter metric.Int64Counter
 }
 
 // New creates a Scraper.
@@ -50,7 +57,16 @@ func New(api *curseforge2.Client, db *store2.SQLiteStore, badger *store2.BadgerS
 	if pageSize <= 0 {
 		pageSize = 50
 	}
-	return &Scraper{api: api, db: db, badger: badger, pageSize: pageSize, log: log}
+	return &Scraper{
+		api:      api,
+		db:       db,
+		badger:   badger,
+		pageSize: pageSize,
+		log:      log,
+		counters: scrapperCounterSet{
+			apiRequestsCounter: telemetry.NewInt64CounterMeter("curseforge.api_requests_total"),
+		},
+	}
 }
 
 // Sync runs a sync for all configured classes. It continues on per-class
@@ -70,7 +86,7 @@ func (s *Scraper) Sync(ctx context.Context, opts SyncOptions) error {
 func (s *Scraper) syncClass(ctx context.Context, class curseforge2.ClassInfo, opts SyncOptions) error {
 	log := s.log
 	start := time.Now()
-	log.With("class_id", class.ID, "clqaqss_name", class.Name).InfoContext(ctx, "syncing class")
+	log.With("class_id", class.ID, "class_name", class.Name).InfoContext(ctx, "syncing class")
 
 	categories, err := s.api.GetCategories(ctx, class.ID)
 	if err != nil {
@@ -213,6 +229,7 @@ func (s *Scraper) fetchPartition(ctx context.Context, p partition, limit int) (i
 	s.log.With("partition", p, "limit", limit).Info("fetching results")
 	fetched := 0
 	for index := 0; index < limit && index < maxSearchResults; index += s.pageSize {
+		s.counters.apiRequestsCounter.Add(ctx, 1)
 		res, err := s.api.SearchMods(ctx, p.searchParams(index, s.pageSize))
 		if err != nil {
 			return fetched, fmt.Errorf("fetching partition %s at index %d: %w", p, index, err)
