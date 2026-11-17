@@ -2,16 +2,22 @@ package store
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/eldius/cli-telemetry-poc/client/curseforge"
 	badgerhold "github.com/timshannon/badgerhold/v4"
 )
 
-var _ Store = &BadgerStore{}
+var (
+	_ Store         = &BadgerStore{}
+	_ badger.Logger = &badgerLogger{}
+)
 
 // BadgerStore is a store implementation using BadgerDB
 type BadgerStore struct {
@@ -128,7 +134,7 @@ func NewBadgerStore(ctx context.Context, path string) (*BadgerStore, error) {
 	options := badgerhold.DefaultOptions
 	options.Dir = path
 	options.ValueDir = path
-	//options.Logger = badgerLogger{logs.NewLogger(ctx)}
+	options.Logger = badgerLogger{l: slog.With("pkg", "badger"), ctx: ctx}
 	store, err := badgerhold.Open(options)
 	if err != nil {
 		return nil, err
@@ -136,24 +142,29 @@ func NewBadgerStore(ctx context.Context, path string) (*BadgerStore, error) {
 	return &BadgerStore{store: store}, nil
 }
 
-//var _ badger.Logger = &badgerLogger{}
-//
-//type badgerLogger struct {
-//	l slog.Logger
-//}
-//
-//func (b badgerLogger) Errorf(s string, i ...any) {
-//	b.l.Errorf(s, i...)
-//}
-//
-//func (b badgerLogger) Warningf(s string, i ...any) {
-//	b.l.Warnf(s, i...)
-//}
-//
-//func (b badgerLogger) Infof(s string, i ...any) {
-//	b.l.Infof(s, i...)
-//}
-//
-//func (b badgerLogger) Debugf(s string, i ...any) {
-//	b.l.Debugf(s, i...)
-//}
+var _ badger.Logger = &badgerLogger{}
+
+type badgerLogger struct {
+	l   *slog.Logger
+	ctx context.Context
+}
+
+func (b badgerLogger) Errorf(s string, i ...any) {
+	b.getLogger(s, i).ErrorContext(b.ctx, "BadgerStore")
+}
+
+func (b badgerLogger) getLogger(s string, i ...any) *slog.Logger {
+	return b.l.With(slog.String("badger.msg", fmt.Sprintf(s, i...)))
+}
+
+func (b badgerLogger) Warningf(s string, i ...any) {
+	b.getLogger(s, i).WarnContext(b.ctx, "BadgerStore")
+}
+
+func (b badgerLogger) Infof(s string, i ...any) {
+	b.getLogger(s, i).InfoContext(b.ctx, "BadgerStore")
+}
+
+func (b badgerLogger) Debugf(s string, i ...any) {
+	b.getLogger(s, i).DebugContext(b.ctx, "BadgerStore")
+}
