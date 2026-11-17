@@ -16,25 +16,25 @@ import (
 )
 
 type TelemetryOptions struct {
-	Service Service
-	Backend Backends
+	Service Service  `json:"service" yaml:"service" mapstructure:"service"`
+	Backend Backends `json:"backend" yaml:"backend" mapstructure:"backend"`
 }
 
 type Backends struct {
-	Traces  Backend
-	Metrics Backend
-	Logs    Backend
+	Traces  Backend `json:"traces" yaml:"traces" mapstructure:"traces"`
+	Metrics Backend `json:"metrics" yaml:"metrics" mapstructure:"metrics"`
+	Logs    Backend `json:"logs" yaml:"logs" mapstructure:"logs"`
 }
 
 type Service struct {
-	Name    string
-	Version string
+	Name    string `json:"name" yaml:"name" mapstructure:"name"`
+	Version string `json:"version" yaml:"version" mapstructure:"version"`
 }
 
 type Backend struct {
-	Endpoint    string
-	AuthHeaders map[string]string
-	Enabled     bool
+	Endpoint    string            `json:"endpoint" yaml:"endpoint" mapstructure:"endpoint"`
+	AuthHeaders map[string]string `json:"auth_headers" yaml:"auth_headers" mapstructure:"auth_headers"`
+	Enabled     bool              `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
 }
 
 func Setup(ctx context.Context, cfg TelemetryOptions) (ShutdowwnFunc, error) {
@@ -68,35 +68,37 @@ func Setup(ctx context.Context, cfg TelemetryOptions) (ShutdowwnFunc, error) {
 
 type ShutdowwnFunc func()
 
-func CobraCmdExecute(ctx context.Context, rootCmd *cobra.Command) {
-	if tracer := otel.GetTracerProvider().Tracer("cli-telemetry-poc"); tracer != nil {
-		execName := filepath.Base(os.Args[0])
-		pid := os.Getpid()
-		spanCtx, span := tracer.Start(
-			ctx,
-			execName,
-			trace.WithSpanKind(trace.SpanKindInternal),
-			trace.WithAttributes(
-				attribute.String("process.executable.name", execName),
-				attribute.Int("process.pid", pid),
-				attribute.StringSlice("process.command_args", os.Args[1:]),
-				attribute.String("process.executable.path", os.Args[0]),
-				attribute.String("process.command", strings.Join(os.Args, " ")),
-				attribute.String("otel.span.parent.origin", "none"),
-				attribute.String("service.name", "cli-telemetry-poc"),
-			),
-		)
+// CobraCmdExecute runs rootCmd wrapped in a root span and returns the
+// process exit code. It never calls os.Exit, so the caller can flush
+// telemetry before terminating.
+func CobraCmdExecute(ctx context.Context, rootCmd *cobra.Command) int {
+	tracer := otel.GetTracerProvider().Tracer("cli-telemetry-poc")
+	execName := filepath.Base(os.Args[0])
+	pid := os.Getpid()
+	spanCtx, span := tracer.Start(
+		ctx,
+		execName,
+		trace.WithSpanKind(trace.SpanKindInternal),
+		trace.WithAttributes(
+			attribute.String("process.executable.name", execName),
+			attribute.Int("process.pid", pid),
+			attribute.StringSlice("process.command_args", os.Args[1:]),
+			attribute.String("process.executable.path", os.Args[0]),
+			attribute.String("process.command", strings.Join(os.Args, " ")),
+			attribute.String("otel.span.parent.origin", "none"),
+			attribute.String("service.name", "cli-telemetry-poc"),
+		),
+	)
+	defer span.End()
 
-		if err := rootCmd.ExecuteContext(spanCtx); err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			span.SetAttributes(attribute.Int("process.exit.code", 1))
-			span.SetAttributes(attribute.String("error.type", "1"))
-			span.End()
-			os.Exit(1)
-		}
-
-		span.End()
+	if err := rootCmd.ExecuteContext(spanCtx); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.SetAttributes(attribute.Int("process.exit.code", 1))
+		span.SetAttributes(attribute.String("error.type", "1"))
+		return 1
 	}
+
+	return 0
 }
 
 func toInternalConfig(opts TelemetryOptions) telemetry.Options {

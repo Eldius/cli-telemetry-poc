@@ -43,7 +43,13 @@ func (lrt *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 			Body:    ExtractRequestBody(req),
 		},
 	}
-	log.With("request", logData).DebugContext(ctx, "HTTPRemoteRequestStarting")
+	//log.With("request", logData).DebugContext(ctx, "HTTPRemoteRequestStarting")
+	log.With(
+		"http.url", logData.URL,
+		"http.method", logData.Method,
+		"http.request.headers", logData.Request.Headers,
+		"http.request.body", logData.Request.Body,
+	).DebugContext(ctx, "HTTPRemoteRequestStarting")
 
 	start := time.Now()
 
@@ -62,7 +68,17 @@ func (lrt *loggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 		}
 	}
 
-	log.With("request", logData).DebugContext(ctx, "HTTPRemoteRequestFinished")
+	//log.With("request", logData).DebugContext(ctx, "HTTPRemoteRequestFinished")
+	log.With(
+		"http.url", logData.URL,
+		"http.method", logData.Method,
+		"http.request.headers", logData.Request.Headers,
+		"http.request.body", logData.Request.Body,
+		"http.response.headers", logData.Response.Headers,
+		"http.response.body", logData.Response.Body,
+		"http.response.status_code", logData.Response.StatusCode,
+		"http.duration", logData.Duration,
+	).DebugContext(ctx, "HTTPRemoteRequestFinished")
 
 	return resp, nil
 }

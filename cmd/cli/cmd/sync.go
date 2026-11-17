@@ -12,7 +12,6 @@ import (
 	"github.com/eldius/cli-telemetry-poc/pkg/http"
 	"github.com/eldius/cli-telemetry-poc/pkg/telemetry"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -32,10 +31,10 @@ CurseForge and upserts it into the local SQLite database.
 The first run performs a full sync per class (partitioning search queries to
 work around the CurseForge 10k search result cap). Subsequent runs only fetch
 mods updated since the last sync, unless --full is given.`,
-	Example: `  minecraft-mods-db sync                    # incremental sync of all classes
-  minecraft-mods-db sync --full             # full re-sync of all classes
-  minecraft-mods-db sync --classes mods,modpacks
-  MMDB_CURSEFORGE_API_KEY=xxx minecraft-mods-db sync --full`,
+	Example: `  cli-telemetry-poc sync                    # incremental sync of all classes
+  cli-telemetry-poc sync --full             # full re-sync of all classes
+  cli-telemetry-poc sync --classes mods,modpacks
+  CURSEFORGE_API_KEY=xxx cli-telemetry-poc sync --full`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
 		log := slog.Default()
@@ -63,7 +62,7 @@ mods updated since the last sync, unless --full is given.`,
 			return telemetry.RecordErrorAndClose(ctx, err)
 		}
 
-		s := scraper.New(api, db, badger, viper.GetInt("scraper.page_size"), log)
+		s := scraper.New(api, db, badger, 0, log)
 		if err := s.Sync(ctx, scraper.SyncOptions{
 			Full:        syncFull,
 			AllVersions: syncAllVersions,
@@ -82,11 +81,11 @@ func init() {
 	syncCmd.Flags().BoolVar(&syncFull, "full", false, "fetch the whole catalog even if a previous sync exists")
 	syncCmd.Flags().BoolVar(&syncAllVersions, "all-versions", false, "partition full syncs by all game versions, including snapshots and pre-releases")
 	syncCmd.Flags().StringSliceVar(&syncClasses, "classes", nil, "comma-separated content classes to sync (known: "+curseforge.KnownClassNames()+")")
-	syncCmd.Flags().StringVar(&syncDBPath, "db", "", "database file path (overrides db.path config)")
+	syncCmd.Flags().StringVar(&syncDBPath, "db", "", "database file path (default .data/mods.db)")
 }
 
-// newAPIClient builds a CurseForge API client from the resolved
-// configuration.
+// newAPIClient builds a CurseForge API client. The API key comes from the
+// CURSEFORGE_API_KEY environment variable.
 func newAPIClient() (*curseforge.Client, error) {
 	return curseforge.New(curseforge.Config{
 		BaseURL:           "https://api.curseforge.com",
@@ -97,8 +96,8 @@ func newAPIClient() (*curseforge.Client, error) {
 	})
 }
 
-// openDatabase opens the store at the configured path, honoring the --db
-// override.
+// openDatabase opens the store at the --db path, defaulting to
+// .data/mods.db when the flag is empty.
 func openDatabase(dbFlag string) (*store.SQLiteStore, error) {
 	path := dbFlag
 	if path == "" {
@@ -111,26 +110,11 @@ func openBadger(ctx context.Context) (*store.BadgerStore, error) {
 	return store.NewBadgerStore(ctx, ".data/badger.db")
 }
 
-// resolveClasses parses the --classes flag (falling back to the
-// scraper.classes config value) into class infos.
+// resolveClasses parses the --classes flag into class infos, defaulting to
+// all known classes when the flag is empty.
 func resolveClasses(classesFlag []string) ([]curseforge.ClassInfo, error) {
-	names := classesFlag
-	if len(names) == 0 {
-		names = []string{
-			"mods",
-			"modpacks",
-			"addons",
-			"resource-packs",
-			"worlds",
-			"bukkit-plugins",
-			"customization",
-			"shaders",
-			"data-packs",
-		}
+	if len(classesFlag) == 0 {
+		return curseforge.KnownClasses, nil
 	}
-	classes, err := curseforge.ResolveClasses(names)
-	if err != nil {
-		return nil, err
-	}
-	return classes, nil
+	return curseforge.ResolveClasses(classesFlag)
 }

@@ -1,6 +1,3 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-*/
 package main
 
 import (
@@ -13,35 +10,32 @@ import (
 )
 
 func main() {
-	//cmd.Execute()
+	os.Exit(run())
+}
+
+// run wires telemetry and executes the root command, returning the process
+// exit code. Defers (including the telemetry flush) run before os.Exit.
+func run() int {
 	ctx := context.Background()
-
-	// Initialize tracing
-	otelAuthToken := os.Getenv("OPENOBSERVE_AUTH_TOKEN")
-	backend := setup.Backend{
-		Endpoint: "192.168.0.152:5081",
-		AuthHeaders: map[string]string{
-			"Authorization": otelAuthToken,
-			"organization":  "default",
-			"stream":        "default",
-		},
-		Enabled: true,
+	svc := setup.Service{
+		Name:    "cli-telemetry-poc",
+		Version: "0.0.0a",
 	}
-	shutdown, err := setup.Setup(ctx, setup.TelemetryOptions{
-		Service: setup.Service{
-			Name:    "cli-telemetry-poc",
-			Version: "0.0.0a",
-		},
-		Backend: setup.Backends{
-			Traces:  backend,
-			Metrics: backend,
-			Logs:    backend,
-		},
-	})
-	if err != nil {
+	ini := func() error {
+		cmd.Execute(ctx)
+		return nil
+	}
+	if err := setup.MainWrapper(
+		ctx,
+		svc,
+		ini,
+		setup.WithConfigFileName("config"),
+		setup.WithConfigFileType("yaml"),
+		setup.WithConfigFileLookupDirectories("."),
+		setup.WithEnvPrefix("cli_telemetry"),
+	); err != nil {
 		fmt.Printf("setup telemetry failed: %v\n", err)
+		return 1
 	}
-	defer shutdown()
-
-	cmd.Execute(ctx)
+	return 0
 }

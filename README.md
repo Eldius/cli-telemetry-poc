@@ -1,9 +1,7 @@
 # cli-telemetry-poc
 
-```text
-Authorization: Basic Y2xpLXBvY3M6bzJvaV9KazYxVUpQdmlQelpORThDZVJ3TXdIWHp2TkNENjF6eQ==
-o2oi_Jk61UJPviPzZNE8CeRwMwHXzvNCD61zy
-```
+It's a sample code to study OTEL telemetry
+configuration patterns.
 
 ## reference links
 

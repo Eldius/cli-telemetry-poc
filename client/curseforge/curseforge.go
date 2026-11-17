@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/eldius/initial-config-go/logs"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // DefaultBaseURL is the CurseForge API base URL.
@@ -25,10 +27,11 @@ const (
 	initialBackoff   = 1 * time.Second
 	maxBackoff       = 30 * time.Second
 	maxErrorBodySize = 4 << 10
+	meterName        = "github.com/eldius/cli-telemetry-poc/client/curseforge"
 )
 
 // ErrAPIKeyRequired is returned when no API key is configured.
-var ErrAPIKeyRequired = errors.New("curseforge API key is required (set MMDB_CURSEFORGE_API_KEY or curseforge.api_key in the config file; get one at https://console.curseforge.com)")
+var ErrAPIKeyRequired = errors.New("curseforge API key is required (set CURSEFORGE_API_KEY; get one at https://console.curseforge.com)")
 
 // APIError is a non-successful response from the CurseForge API.
 type APIError struct {
@@ -51,11 +54,17 @@ type Config struct {
 
 // Client is a CurseForge API curseforge with rate limiting and retries.
 type Client struct {
-	baseURL string
-	apiKey  string
-	gameID  int
-	http    *http.Client
-	limiter *rateLimiter
+	baseURL  string
+	apiKey   string
+	gameID   int
+	http     *http.Client
+	limiter  *rateLimiter
+	counters *clientCounters
+}
+
+type clientCounters struct {
+	modsFetched metric.Int64Histogram
+	apiCalls    metric.Int64Counter
 }
 
 // New creates a Client.
@@ -72,12 +81,31 @@ func New(cfg Config) (*Client, error) {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 60 * time.Second}
 	}
+
+	var counters clientCounters
+
+	if mp := otel.GetMeterProvider(); mp != nil {
+		meter := mp.Meter(
+			meterName,
+			metric.WithSchemaURL(meterName),
+		)
+		var err error
+		counters.modsFetched, err = meter.Int64Histogram("curseforge.mods_search.fetched")
+		if err != nil {
+			return nil, fmt.Errorf("meter curseforge.mods_search.fetched failed: %w", err)
+		}
+		counters.apiCalls, err = meter.Int64Counter("curseforge.mods_search.api_call")
+		if err != nil {
+			return nil, fmt.Errorf("meter curseforge.mods_search.api_call failed: %w", err)
+		}
+	}
 	return &Client{
-		baseURL: strings.TrimSuffix(cfg.BaseURL, "/"),
-		apiKey:  cfg.APIKey,
-		gameID:  cfg.GameID,
-		http:    cfg.HTTPClient,
-		limiter: newRateLimiter(cfg.RequestsPerSecond),
+		baseURL:  strings.TrimSuffix(cfg.BaseURL, "/"),
+		apiKey:   cfg.APIKey,
+		gameID:   cfg.GameID,
+		http:     cfg.HTTPClient,
+		limiter:  newRateLimiter(cfg.RequestsPerSecond),
+		counters: &counters,
 	}, nil
 }
 
@@ -137,6 +165,7 @@ func (c *Client) SearchMods(ctx context.Context, p SearchParams) (*SearchResult,
 		if err := json.Unmarshal(r, &m); err != nil {
 			return nil, fmt.Errorf("decoding mod: %w", err)
 		}
+		c.registerModsFetched(ctx, int64(len(res.Mods)))
 		res.Mods = append(res.Mods, ModEnvelope{Mod: m, Raw: r})
 	}
 	return res, nil
@@ -201,6 +230,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) (json.RawMe
 		}
 
 		resp, err := c.http.Do(req) //nolint:bodyclose // It will be closed at `readAndClose`
+		c.registerApiCall(ctx)
 		if err != nil {
 			lastErr = err
 		} else {
@@ -240,6 +270,20 @@ func (c *Client) get(ctx context.Context, path string, q url.Values) (json.RawMe
 		}
 	}
 	return nil, fmt.Errorf("request failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+func (c *Client) registerApiCall(ctx context.Context) {
+	if c.counters.apiCalls == nil {
+		return
+	}
+	c.counters.apiCalls.Add(ctx, 1)
+}
+
+func (c *Client) registerModsFetched(ctx context.Context, count int64) {
+	if c.counters.modsFetched == nil {
+		return
+	}
+	c.counters.modsFetched.Record(ctx, count)
 }
 
 func isRetryable(status int) bool {
